@@ -55,7 +55,7 @@ export function AppShell({ children, adminOnly }: { children: (me: Me) => ReactN
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-3xl px-4 py-5">{children(m)}</main>
+      <main className="mx-auto w-full min-w-0 max-w-3xl px-4 py-5">{children(m)}</main>
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden" aria-label="하단 메뉴">
         <div className="mx-auto flex max-w-3xl">
           {nav.map((n) => (

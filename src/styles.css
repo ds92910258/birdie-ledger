@@ -126,3 +126,20 @@
 @utility bg-hero { background-image: var(--gradient-hero); }
 @utility shadow-soft { box-shadow: var(--shadow-soft); }
 
+
+/* Safari date controls must shrink with their grid/flex parent. */
+.date-input {
+  box-sizing: border-box;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.date-input::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}
+.date-input::-webkit-datetime-edit {
+  min-width: 0;
+  padding: 0;
+}

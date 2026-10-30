@@ -55,7 +55,7 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --font-sans: "Pretendard Variable", Pretendard, system-ui, sans-serif;
-  --font-display: "Gowun Batang", serif;
+  --font-display: "Pretendard Variable", Pretendard, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
   --shadow-soft: var(--shadow-soft);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -121,7 +121,7 @@
 
 @layer base {
   body { font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
-  h1, h2, .font-display { font-family: var(--font-display); }
+  h1, h2, .font-display { font-family: var(--font-display); letter-spacing: -0.025em; }
 }
 @utility bg-hero { background-image: var(--gradient-hero); }
 @utility shadow-soft { box-shadow: var(--shadow-soft); }

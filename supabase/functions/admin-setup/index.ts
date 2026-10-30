@@ -1,4 +1,4 @@
-import {createClient} from 'https://esm.sh/@supabase/supabase-js@2';
+import {createClient} from 'https://esm.sh/@supabase/supabase-js@2.118.0';
 const cors={'Access-Control-Allow-Origin':Deno.env.get('APP_ORIGIN')||'*','Access-Control-Allow-Headers':'authorization,x-client-info,apikey,content-type','Access-Control-Allow-Methods':'POST,OPTIONS'};
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...cors,'Content-Type':'application/json','Cache-Control':'no-store'}});
 async function equal(a:string,b:string){const enc=new TextEncoder();const [x,y]=await Promise.all([crypto.subtle.digest('SHA-256',enc.encode(a)),crypto.subtle.digest('SHA-256',enc.encode(b))]);const u=new Uint8Array(x),v=new Uint8Array(y);let d=0;for(let i=0;i<u.length;i++)d|=u[i]^v[i];return d===0}
@@ -19,8 +19,9 @@ Deno.serve(async req=>{
   if(expected.length!==64||setup?.used_at||!await equal(tokenHash,expected))return json({error:'설정 토큰을 확인해 주세요.'},403);
   if(typeof body.password!=='string'||body.password.length<10||body.password.length>72)return json({error:'비밀번호는 10~72자여야 합니다.'},400);
   // A unique auth email prevents two concurrent bootstrap requests from creating separate admins.
-  const {data,error}=await db.auth.admin.createUser({email:'owner@admin.birdiejangbu.app',password:body.password,email_confirm:true,app_metadata:{bootstrap_admin:'true',name:'정동성'}});
+  const {data,error}=await db.auth.admin.createUser({email:'owner@admin.birdiejangbu.app',password:body.password,email_confirm:true,user_metadata:{name:'정동성',bootstrap_proof:tokenHash},app_metadata:{name:'정동성'}});
   if(error||!data.user)return json({error:'계정 생성에 실패했습니다. 소유자 설정을 확인해 주세요.'},409);
+  await db.auth.admin.updateUserById(data.user.id,{user_metadata:{bootstrap_proof:null}});
   const {error:roleError}=await db.from('user_roles').insert({user_id:data.user.id,role:'admin'});
   if(roleError){await db.auth.admin.deleteUser(data.user.id);return json({error:'관리자 권한을 설정하지 못했습니다.'},500)}
   await db.from('owner_bootstrap').update({used_at:new Date().toISOString()}).eq('id',1);

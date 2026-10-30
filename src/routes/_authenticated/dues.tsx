@@ -175,20 +175,20 @@ export function EntryForm({ onDone, categories }: { onDone: () => void; categori
   }
   return <form onSubmit={submit} noValidate className="space-y-3 rounded-2xl border border-border bg-card p-4">
     <h2 className="font-bold">수입·지출 기록</h2>
-    <div className="grid grid-cols-2 gap-3">
-      <div className="space-y-1"><Label htmlFor="kind">구분</Label><select id="kind" name="kind" value={kind} onChange={e=>{const k=e.target.value as 'income'|'expense';setKind(k);setCategory(k==='income'?'penalty':'food');setLabel('');}} className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"><option value="expense">지출</option><option value="income">수입</option></select></div>
-      <div className="space-y-1"><Label htmlFor="category">분류</Label><select id="category" name="category" value={category} onChange={e=>setCategory(e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="min-w-0 space-y-1"><Label htmlFor="kind">구분</Label><select id="kind" name="kind" value={kind} onChange={e=>{const k=e.target.value as 'income'|'expense';setKind(k);setCategory(k==='income'?'penalty':'food');setLabel('');}} className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"><option value="expense">지출</option><option value="income">수입</option></select></div>
+      <div className="min-w-0 space-y-1"><Label htmlFor="category">분류</Label><select id="category" name="category" value={category} onChange={e=>setCategory(e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm">
         {kind==='income'?<option value="penalty">벌금</option>:<><option value="food">식비</option><option value="coffee">커피</option></>}
         <option value="other">기타</option>
         {available.map(c=><option key={c.id} value={'custom:'+c.id}>{c.label}</option>)}
         <option value="add">＋ 분류 추가</option>
       </select></div>
-      <div className="space-y-1"><Label htmlFor="edate">날짜</Label><Input id="edate" name="date" type="date" value={entryDate} onChange={e=>setEntryDate(e.target.value)} required /></div>
-      <div className="space-y-1"><Label htmlFor="amount">금액 (원)</Label><Input id="amount" name="amount" type="text" inputMode="numeric" required placeholder="예: 30,000" /></div>
+      <div className="min-w-0 space-y-1"><Label htmlFor="edate">날짜</Label><Input id="edate" name="date" type="date" value={entryDate} onChange={e=>setEntryDate(e.target.value)} required /></div>
+      <div className="min-w-0 space-y-1"><Label htmlFor="amount">금액 (원)</Label><Input id="amount" name="amount" type="text" inputMode="numeric" required placeholder="예: 30,000" /></div>
     </div>
     {category==='add'&&<div className="space-y-2 rounded-xl bg-muted/40 p-3"><Label htmlFor="new-category">추가할 {kind==='income'?'수입':'지출'} 분류</Label><div className="flex gap-2"><Input id="new-category" value={label} onChange={e=>setLabel(e.target.value)} maxLength={30} placeholder={kind==='income'?'예: 정기회비, 찬조금':'예: 스크린 이용료, 교통비'} /><Button type="button" disabled={adding} onClick={addCategory}>{adding?'저장 중…':'추가'}</Button></div><p className="text-xs text-muted-foreground">추가한 분류는 다음에도 선택할 수 있어요.</p></div>}
     {kind==='income'&&category==='penalty'&&<p className="text-xs text-muted-foreground">게임 벌금은 위 ‘납부 확인’으로 기록하세요. 여기서 별도로 입력한 벌금은 게임의 미납 상태를 바꾸지 않으니 중복 기록에 주의해 주세요.</p>}
-    <div className="space-y-1"><Label htmlFor="emo">메모</Label><Input id="emo" name="memo" maxLength={300} /></div>
+    <div className="min-w-0 space-y-1"><Label htmlFor="emo">메모</Label><Input id="emo" name="memo" maxLength={300} /></div>
     {feedback&&<p role={feedback.kind==='error'?'alert':'status'} className={`rounded-lg p-3 text-sm ${feedback.kind==='error'?'bg-destructive/10 text-destructive':feedback.kind==='success'?'bg-success/10 text-success':'bg-secondary text-foreground'}`}>{feedback.text}</p>}
     <Button type="submit" disabled={busy||adding} className="w-full">{busy?'서버에 저장 중…':'회비 저장하기'}</Button>
   </form>;

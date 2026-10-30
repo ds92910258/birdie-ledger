@@ -47,18 +47,18 @@ function RecordsView({ me }: { me: Me }) {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">개인기록</h1>
       <p className="text-sm text-muted-foreground">선택한 회원의 최근 10게임 스코어입니다. 오버파가 낮을수록 좋은 기록이에요.</p>
-      <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border bg-card p-4">
-        <div className="space-y-1"><Label htmlFor="ma">회원</Label>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-2xl border border-border bg-card p-4">
+        <div className="min-w-0 space-y-1"><Label htmlFor="ma">회원</Label>
           <select id="ma" className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm" value={a} onChange={(e) => {setA(e.target.value);if(b===e.target.value)setB("");}}>
             {opts.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select></div>
-        <div className="space-y-1"><Label htmlFor="mb">비교 (선택)</Label>
+        <div className="min-w-0 space-y-1"><Label htmlFor="mb">비교 (선택)</Label>
           <select id="mb" className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm" value={b} onChange={(e) => setB(e.target.value)}>
             <option value="">없음</option>
             {opts.filter((m) => m.id !== a).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select></div>
-        <div className="space-y-1"><Label htmlFor="from">시작일</Label><Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
-        <div className="space-y-1"><Label htmlFor="to">종료일</Label><Input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
+        <div className="min-w-0 space-y-1"><Label htmlFor="from">시작일</Label><Input id="from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></div>
+        <div className="min-w-0 space-y-1"><Label htmlFor="to">종료일</Label><Input id="to" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></div>
       </div>
       <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${view.stats.length}, minmax(0,1fr))` }}>
         {view.stats.map((s, i) => (

@@ -6,6 +6,7 @@ import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, StateBox } from "@/components/AppShell";
 import { errMsg, useClubData, useRefresh } from "@/lib/club";
+import { auditLabel,auditTime } from "@/lib/audit-label";
 import { formatPhone } from "@/lib/golf";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +32,7 @@ function AdminView() {
   async function setStatus(id: string, status: "approved" | "rejected" | "revoked") {
     const { error } = await supabase.rpc("admin_set_member_status", { _user_id: id, _status: status });
     if (error) return void toast.error(errMsg(error));
-    toast.success("변경했어요"); members.refetch(); refresh();
+    toast.success("변경했어요"); members.refetch(); audit.refetch(); refresh();
   }
 
   return (
@@ -60,10 +61,18 @@ function AdminView() {
       </section>
       <Backup />
       <section>
-        <h2 className="mb-2 text-lg font-bold">변경 기록 (최근 50건)</h2>
-        {audit.isLoading ? <StateBox>불러오는 중…</StateBox> : !audit.data?.length ? <StateBox>기록이 없어요.</StateBox> : (
-          <ul className="max-h-80 overflow-auto rounded-2xl border border-border bg-card text-xs">
-            {audit.data.map((a) => <li key={a.id} className="border-b border-border p-2"><span className="text-muted-foreground">{new Date(a.created_at).toLocaleString("ko-KR")}</span> · {a.action} {a.details ? JSON.stringify(a.details).slice(0, 120) : ""}</li>)}
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><h2 className="text-lg font-bold">변경 기록 (최근 50건)</h2><Button variant="ghost" size="sm" onClick={()=>audit.refetch()}>새로고침</Button></div>
+        {audit.isLoading ? <StateBox>불러오는 중…</StateBox> : audit.error ? <StateBox>변경 기록을 불러오지 못했어요. 새로고침을 눌러 주세요.</StateBox> : !audit.data?.length ? <StateBox>기록이 없어요.</StateBox> : (
+          <ul className="max-h-96 overflow-y-auto rounded-2xl border border-border bg-card">
+            {audit.data.map((a)=>{
+              const name=(id:string)=>members.data?.find(m=>m.id===id)?.name||'이전 회원';
+              const label=auditLabel(a,name);
+              return <li key={a.id} className="min-w-0 space-y-1 border-b border-border p-3 last:border-b-0">
+                <p className="break-words text-sm font-semibold">{label.title}</p>
+                {label.detail&&<p className="break-words text-sm text-muted-foreground">{label.detail}</p>}
+                <p className="break-words text-xs text-muted-foreground">{auditTime(a.created_at)} · 처리: {a.actor?name(a.actor):'시스템'}</p>
+              </li>;
+            })}
           </ul>
         )}
       </section>

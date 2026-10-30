@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell, StateBox } from "@/components/AppShell";
@@ -8,6 +8,7 @@ import { CATEGORY_LABEL, computeBalance, computeUnpaid, formatDateKo, formatOver
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { parseWonInput,validEntryDate } from "@/lib/entry-input";
 import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_authenticated/dues")({
@@ -117,6 +118,9 @@ function UnpaidRow({ label, amount, isAdmin, onPay }: { label: string; amount: n
 
 export function EntryForm({ onDone, categories }: { onDone: () => void; categories: { id:string; kind:"income"|"expense"; label:string }[] }) {
   const [busy,setBusy]=useState(false);
+  const saving=useRef(false);
+  const [entryDate,setEntryDate]=useState(todayKST());
+  const [feedback,setFeedback]=useState<{kind:'error'|'success'|'info';text:string}|null>(null);
   const [kind,setKind]=useState<"income"|"expense">("expense");
   const [category,setCategory]=useState("food");
   const [label,setLabel]=useState("");
@@ -132,27 +136,44 @@ export function EntryForm({ onDone, categories }: { onDone: () => void; categori
     try{
       const {data,error}=await supabase.from('ledger_categories').insert({kind,label:name}).select('id,kind,label').single();
       if(error){toast.error(errMsg(error));return;}
-      setLocalCategories(prev=>[...prev,data]);setCategory('custom:'+data.id);setLabel('');onDone();toast.success('분류를 추가했어요');
+      setLocalCategories(prev=>[...prev,data]);setCategory('custom:'+data.id);setLabel('');onDone();setFeedback({kind:'info',text:'분류를 추가했어요. 금액을 입력하고 아래 ‘회비 저장하기’를 눌러야 장부에 기록됩니다.'});toast.success('분류를 추가했어요');
     }catch{toast.error('분류를 저장하지 못했습니다. 다시 시도해 주세요.');}
     finally{setAdding(false);}
   }
   async function submit(e:FormEvent<HTMLFormElement>){
-    e.preventDefault();if(category==='add'){toast.error('분류를 먼저 추가해 주세요');return;}
-    const form=e.currentTarget,f=new FormData(form),amount=Number(f.get('amount'));
-    if(!Number.isInteger(amount)||amount<=0||amount>100000000){toast.error('금액은 1원부터 1억원까지 정수로 입력해 주세요');return;}
-    setBusy(true);
+    e.preventDefault();if(saving.current)return;
+    setFeedback(null);
+    const fail=(text:string)=>{setFeedback({kind:'error',text});toast.error(text);};
+    if(category==='add'){fail('분류 이름을 입력한 뒤 ‘추가’를 눌러 주세요.');return;}
+    const form=e.currentTarget,f=new FormData(form),amount=parseWonInput(String(f.get('amount')??''));
+    if(amount===null){fail('금액을 1원부터 1억원까지 입력해 주세요. 예: 10,000');return;}
+    if(!validEntryDate(entryDate)){fail('입금 또는 지출 날짜를 선택해 주세요.');return;}
+    saving.current=true;setBusy(true);
+    let savedId:string|null=null;
     try{
       const customId=category.startsWith('custom:')?category.slice(7):null;
-      const {error}=await supabase.rpc('admin_record_entry',{
+      const {data,error}=await supabase.rpc('admin_record_entry',{
         _kind:kind,_category:customId?'other':category as 'food'|'coffee'|'other'|'penalty',
-        ...(customId?{_custom_category_id:customId}:{}),_amount:amount,_date:String(f.get('date')),_memo:String(f.get('memo')??''),
+        ...(customId?{_custom_category_id:customId}:{}),_amount:amount,_date:entryDate,_memo:String(f.get('memo')??''),
       });
-      if(error){toast.error(errMsg(error));return;}
-      form.reset();onDone();toast.success('장부에 기록했어요');
-    }catch{toast.error('저장하지 못했습니다. 다시 시도해 주세요.');}
-    finally{setBusy(false);}
+      if(error){fail(errMsg(error));return;}
+      if(!data){fail('저장 결과를 확인하지 못했습니다. 새로고침 후 장부를 확인해 주세요.');return;}
+      savedId=data;
+      const check=await supabase.from('ledger_entries').select('id,amount,kind').eq('id',savedId).single();
+      if(check.error||check.data?.amount!==amount){
+        setFeedback({kind:'info',text:'저장 요청은 완료됐지만 조회를 확인하지 못했어요. 중복 입력하지 말고 새로고침해 장부를 확인해 주세요.'});
+        await onDone();return;
+      }
+      form.reset();
+      await onDone();
+      setFeedback({kind:'success',text:`${kind==='income'?'수입':'지출'} ${won(amount)}을 저장했습니다. 아래 공동 장부에서 확인하세요.`});
+      toast.success('회비가 저장됐어요');
+    }catch{
+      if(savedId)setFeedback({kind:'info',text:'저장 요청은 완료됐어요. 중복 입력하지 말고 새로고침해 장부를 확인해 주세요.'});
+      else fail('서버 응답을 확인하지 못했습니다. 새로고침해 장부를 확인한 뒤 다시 시도해 주세요.');
+    }finally{saving.current=false;setBusy(false);}
   }
-  return <form onSubmit={submit} className="space-y-3 rounded-2xl border border-border bg-card p-4">
+  return <form onSubmit={submit} noValidate className="space-y-3 rounded-2xl border border-border bg-card p-4">
     <h2 className="font-bold">수입·지출 기록</h2>
     <div className="grid grid-cols-2 gap-3">
       <div className="space-y-1"><Label htmlFor="kind">구분</Label><select id="kind" name="kind" value={kind} onChange={e=>{const k=e.target.value as 'income'|'expense';setKind(k);setCategory(k==='income'?'penalty':'food');setLabel('');}} className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"><option value="expense">지출</option><option value="income">수입</option></select></div>
@@ -162,12 +183,13 @@ export function EntryForm({ onDone, categories }: { onDone: () => void; categori
         {available.map(c=><option key={c.id} value={'custom:'+c.id}>{c.label}</option>)}
         <option value="add">＋ 분류 추가</option>
       </select></div>
-      <div className="space-y-1"><Label htmlFor="edate">날짜</Label><Input id="edate" name="date" type="date" defaultValue={todayKST()} required /></div>
-      <div className="space-y-1"><Label htmlFor="amount">금액 (원)</Label><Input id="amount" name="amount" type="number" min={1} max={100000000} step={1} required placeholder="30000" /></div>
+      <div className="space-y-1"><Label htmlFor="edate">날짜</Label><Input id="edate" name="date" type="date" value={entryDate} onChange={e=>setEntryDate(e.target.value)} required /></div>
+      <div className="space-y-1"><Label htmlFor="amount">금액 (원)</Label><Input id="amount" name="amount" type="text" inputMode="numeric" required placeholder="예: 30,000" /></div>
     </div>
     {category==='add'&&<div className="space-y-2 rounded-xl bg-muted/40 p-3"><Label htmlFor="new-category">추가할 {kind==='income'?'수입':'지출'} 분류</Label><div className="flex gap-2"><Input id="new-category" value={label} onChange={e=>setLabel(e.target.value)} maxLength={30} placeholder={kind==='income'?'예: 정기회비, 찬조금':'예: 스크린 이용료, 교통비'} /><Button type="button" disabled={adding} onClick={addCategory}>{adding?'저장 중…':'추가'}</Button></div><p className="text-xs text-muted-foreground">추가한 분류는 다음에도 선택할 수 있어요.</p></div>}
     {kind==='income'&&category==='penalty'&&<p className="text-xs text-muted-foreground">게임 벌금은 위 ‘납부 확인’으로 기록하세요. 여기서 별도로 입력한 벌금은 게임의 미납 상태를 바꾸지 않으니 중복 기록에 주의해 주세요.</p>}
     <div className="space-y-1"><Label htmlFor="emo">메모</Label><Input id="emo" name="memo" maxLength={300} /></div>
-    <Button disabled={busy||adding} className="w-full">{busy?'저장 중…':'기록하기'}</Button>
+    {feedback&&<p role={feedback.kind==='error'?'alert':'status'} className={`rounded-lg p-3 text-sm ${feedback.kind==='error'?'bg-destructive/10 text-destructive':feedback.kind==='success'?'bg-success/10 text-success':'bg-secondary text-foreground'}`}>{feedback.text}</p>}
+    <Button type="submit" disabled={busy||adding} className="w-full">{busy?'서버에 저장 중…':'회비 저장하기'}</Button>
   </form>;
 }

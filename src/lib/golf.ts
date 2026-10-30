@@ -35,7 +35,9 @@ export function won(n: number) {
 }
 
 export function todayKST(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
+  const parts=new Intl.DateTimeFormat("en-US",{timeZone:"Asia/Seoul",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const part=(type:string)=>parts.find(p=>p.type===type)!.value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
 }
 
 export function formatDateKo(d: string) {

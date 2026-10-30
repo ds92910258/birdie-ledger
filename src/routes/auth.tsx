@@ -49,7 +49,7 @@ function AuthPage() {
     const f = new FormData(e.currentTarget);
     const email = loginIdToEmail(String(f.get("id") ?? ""));
     const password = String(f.get("password") ?? "");
-    if (!email) return setErrors({ id: "휴대폰 번호를 정확히 입력해 주세요" });
+    if (!email) return setErrors({ id: "휴대폰 번호 또는 관리자 아이디 admin을 입력해 주세요" });
     if (!password) return setErrors({ lpw: "비밀번호를 입력해 주세요" });
     setErrors({}); setBusy(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -96,8 +96,9 @@ function AuthPage() {
           <TabsContent value="login">
             <form onSubmit={onLogin} className="mt-4 space-y-4" noValidate>
               <div className="space-y-1.5">
-                <Label htmlFor="id">휴대폰 번호</Label>
-                <Input id="id" name="id" inputMode="tel" autoComplete="username" placeholder="010-1234-5678" aria-invalid={!!errors["id"]} />
+                <Label htmlFor="id">휴대폰 번호 또는 관리자 아이디</Label>
+                <Input id="id" name="id" type="text" inputMode="text" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="휴대폰 번호 또는 admin" aria-invalid={!!errors["id"]} />
+                <p className="text-xs text-muted-foreground">총무는 admin으로 로그인하세요.</p>
                 {err("id")}
               </div>
               <div className="space-y-1.5">

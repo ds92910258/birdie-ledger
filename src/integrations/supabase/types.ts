@@ -129,12 +129,34 @@ export type Database = {
         }
         Relationships: []
       }
+      ledger_categories: {
+        Row: {
+          created_at: string
+          id: string
+          kind: Database["public"]["Enums"]["ledger_kind"]
+          label: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: Database["public"]["Enums"]["ledger_kind"]
+          label: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["ledger_kind"]
+          label?: string
+        }
+        Relationships: []
+      }
       ledger_entries: {
         Row: {
           amount: number
           category: Database["public"]["Enums"]["ledger_category"]
           created_at: string
           created_by: string | null
+          custom_category: string | null
           entry_date: string
           id: string
           kind: Database["public"]["Enums"]["ledger_kind"]
@@ -149,6 +171,7 @@ export type Database = {
           category: Database["public"]["Enums"]["ledger_category"]
           created_at?: string
           created_by?: string | null
+          custom_category?: string | null
           entry_date: string
           id?: string
           kind: Database["public"]["Enums"]["ledger_kind"]
@@ -163,6 +186,7 @@ export type Database = {
           category?: Database["public"]["Enums"]["ledger_category"]
           created_at?: string
           created_by?: string | null
+          custom_category?: string | null
           entry_date?: string
           id?: string
           kind?: Database["public"]["Enums"]["ledger_kind"]
@@ -205,6 +229,24 @@ export type Database = {
           },
         ]
       }
+      owner_bootstrap: {
+        Row: {
+          id: number
+          token_hash: string
+          used_at: string | null
+        }
+        Insert: {
+          id: number
+          token_hash: string
+          used_at?: string | null
+        }
+        Update: {
+          id?: number
+          token_hash?: string
+          used_at?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
@@ -229,6 +271,24 @@ export type Database = {
           id?: string
           name?: string
           status?: Database["public"]["Enums"]["member_status"]
+        }
+        Relationships: []
+      }
+      signup_limits: {
+        Row: {
+          attempts: number
+          key: string
+          window_started: string
+        }
+        Insert: {
+          attempts?: number
+          key: string
+          window_started?: string
+        }
+        Update: {
+          attempts?: number
+          key?: string
+          window_started?: string
         }
         Relationships: []
       }
@@ -280,6 +340,17 @@ export type Database = {
         Args: { _amount: number; _received: string; _score_id: string }
         Returns: string
       }
+      admin_record_entry: {
+        Args: {
+          _amount: number
+          _category: Database["public"]["Enums"]["ledger_category"]
+          _custom_category_id?: string
+          _date: string
+          _kind: Database["public"]["Enums"]["ledger_kind"]
+          _memo: string
+        }
+        Returns: string
+      }
       admin_set_member_status: {
         Args: {
           _status: Database["public"]["Enums"]["member_status"]
@@ -291,18 +362,7 @@ export type Database = {
         Args: { _entry_id: string; _reason: string }
         Returns: undefined
       }
-      has_role: {
-        Args: {
-          _role: Database["public"]["Enums"]["app_role"]
-          _user_id: string
-        }
-        Returns: boolean
-      }
-      is_member: { Args: { _user_id: string }; Returns: boolean }
-      write_audit: {
-        Args: { _action: string; _details: Json; _entity: string; _id: string }
-        Returns: undefined
-      }
+      allow_signup_request: { Args: { _key: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin"

@@ -75,7 +75,7 @@ function DuesView({ me }: { me: Me }) {
         )}
       </section>
 
-      {me.isAdmin && <EntryForm onDone={refresh} />}
+      {me.isAdmin && <EntryForm onDone={refresh} categories={q.data!.categories} />}
 
       <section>
         <div className="mb-2 flex items-center justify-between">
@@ -87,8 +87,8 @@ function DuesView({ me }: { me: Me }) {
             {list.map((e) => (
               <li key={e.id} className={`flex items-center gap-3 p-3 ${e.voided_at ? "opacity-50" : ""}`}>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{e.memo || CATEGORY_LABEL[e.category]}</p>
-                  <p className="text-xs text-muted-foreground">{formatDateKo(e.entry_date)} · {CATEGORY_LABEL[e.category]}{e.voided_at && ` · 취소됨: ${e.void_reason}`}</p>
+                  <p className="truncate text-sm font-medium">{e.memo || e.custom_category || CATEGORY_LABEL[e.category]}</p>
+                  <p className="text-xs text-muted-foreground">{formatDateKo(e.entry_date)} · {e.custom_category || CATEGORY_LABEL[e.category]}{e.voided_at && ` · 취소됨: ${e.void_reason}`}</p>
                 </div>
                 <span className={`text-sm font-bold ${e.kind === "income" ? "text-success" : "text-destructive"} ${e.voided_at ? "line-through" : ""}`}>{e.kind === "income" ? "+" : "-"}{won(e.amount)}</span>
                 {me.isAdmin && !e.voided_at && <Button size="sm" variant="ghost" onClick={() => voidEntry(e)}>취소</Button>}
@@ -115,35 +115,59 @@ function UnpaidRow({ label, amount, isAdmin, onPay }: { label: string; amount: n
   );
 }
 
-function EntryForm({ onDone }: { onDone: () => void }) {
-  const [busy, setBusy] = useState(false);
-  async function submit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const f = new FormData(form);
-    const amount = Number(f.get("amount"));
-    if (!Number.isInteger(amount) || amount <= 0) return void toast.error("금액은 1원 이상의 정수로 입력해 주세요");
-    setBusy(true);
-    const { error } = await supabase.rpc("admin_add_entry", {
-      _kind: f.get("kind") as "income" | "expense", _category: f.get("category") as "food" | "coffee" | "other",
-      _amount: amount, _date: String(f.get("date")), _memo: String(f.get("memo") ?? ""),
-    });
-    setBusy(false);
-    if (error) return void toast.error(errMsg(error));
-    toast.success("장부에 기록했어요"); form.reset(); onDone();
+export function EntryForm({ onDone, categories }: { onDone: () => void; categories: { id:string; kind:"income"|"expense"; label:string }[] }) {
+  const [busy,setBusy]=useState(false);
+  const [kind,setKind]=useState<"income"|"expense">("expense");
+  const [category,setCategory]=useState("food");
+  const [label,setLabel]=useState("");
+  const [adding,setAdding]=useState(false);
+  const [localCategories,setLocalCategories]=useState<typeof categories>([]);
+  const available=[...categories,...localCategories.filter(c=>!categories.some(x=>x.id===c.id))].filter(c=>c.kind===kind);
+  async function addCategory(){
+    const name=label.trim();
+    if(!name||name.length>30){toast.error("분류 이름을 1~30자로 입력해 주세요");return;}
+    const duplicate=available.find(c=>c.label===name);
+    if(duplicate){setCategory('custom:'+duplicate.id);setLabel('');return;}
+    setAdding(true);
+    try{
+      const {data,error}=await supabase.from('ledger_categories').insert({kind,label:name}).select('id,kind,label').single();
+      if(error){toast.error(errMsg(error));return;}
+      setLocalCategories(prev=>[...prev,data]);setCategory('custom:'+data.id);setLabel('');onDone();toast.success('분류를 추가했어요');
+    }catch{toast.error('분류를 저장하지 못했습니다. 다시 시도해 주세요.');}
+    finally{setAdding(false);}
   }
-  return (
-    <form onSubmit={submit} className="space-y-3 rounded-2xl border border-border bg-card p-4">
-      <h2 className="font-bold">수입·지출 기록</h2>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1"><Label htmlFor="kind">구분</Label><select id="kind" name="kind" className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"><option value="expense">지출</option><option value="income">수입</option></select></div>
-        <div className="space-y-1"><Label htmlFor="category">분류</Label><select id="category" name="category" className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"><option value="food">식비</option><option value="coffee">커피</option><option value="other">기타</option></select></div>
-        <div className="space-y-1"><Label htmlFor="edate">날짜</Label><Input id="edate" name="date" type="date" defaultValue={todayKST()} required /></div>
-        <div className="space-y-1"><Label htmlFor="amount">금액 (원)</Label><Input id="amount" name="amount" inputMode="numeric" required placeholder="30000" /></div>
-      </div>
-      <div className="space-y-1"><Label htmlFor="emo">메모</Label><Input id="emo" name="memo" maxLength={300} /></div>
-      <Button disabled={busy} className="w-full">{busy ? "저장 중…" : "기록하기"}</Button>
-    </form>
-  );
+  async function submit(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();if(category==='add'){toast.error('분류를 먼저 추가해 주세요');return;}
+    const form=e.currentTarget,f=new FormData(form),amount=Number(f.get('amount'));
+    if(!Number.isInteger(amount)||amount<=0||amount>100000000){toast.error('금액은 1원부터 1억원까지 정수로 입력해 주세요');return;}
+    setBusy(true);
+    try{
+      const customId=category.startsWith('custom:')?category.slice(7):null;
+      const {error}=await supabase.rpc('admin_record_entry',{
+        _kind:kind,_category:customId?'other':category as 'food'|'coffee'|'other'|'penalty',
+        ...(customId?{_custom_category_id:customId}:{}),_amount:amount,_date:String(f.get('date')),_memo:String(f.get('memo')??''),
+      });
+      if(error){toast.error(errMsg(error));return;}
+      form.reset();onDone();toast.success('장부에 기록했어요');
+    }catch{toast.error('저장하지 못했습니다. 다시 시도해 주세요.');}
+    finally{setBusy(false);}
+  }
+  return <form onSubmit={submit} className="space-y-3 rounded-2xl border border-border bg-card p-4">
+    <h2 className="font-bold">수입·지출 기록</h2>
+    <div className="grid grid-cols-2 gap-3">
+      <div className="space-y-1"><Label htmlFor="kind">구분</Label><select id="kind" name="kind" value={kind} onChange={e=>{const k=e.target.value as 'income'|'expense';setKind(k);setCategory(k==='income'?'penalty':'food');setLabel('');}} className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm"><option value="expense">지출</option><option value="income">수입</option></select></div>
+      <div className="space-y-1"><Label htmlFor="category">분류</Label><select id="category" name="category" value={category} onChange={e=>setCategory(e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-2 text-sm">
+        {kind==='income'?<option value="penalty">벌금</option>:<><option value="food">식비</option><option value="coffee">커피</option></>}
+        <option value="other">기타</option>
+        {available.map(c=><option key={c.id} value={'custom:'+c.id}>{c.label}</option>)}
+        <option value="add">＋ 분류 추가</option>
+      </select></div>
+      <div className="space-y-1"><Label htmlFor="edate">날짜</Label><Input id="edate" name="date" type="date" defaultValue={todayKST()} required /></div>
+      <div className="space-y-1"><Label htmlFor="amount">금액 (원)</Label><Input id="amount" name="amount" type="number" min={1} max={100000000} step={1} required placeholder="30000" /></div>
+    </div>
+    {category==='add'&&<div className="space-y-2 rounded-xl bg-muted/40 p-3"><Label htmlFor="new-category">추가할 {kind==='income'?'수입':'지출'} 분류</Label><div className="flex gap-2"><Input id="new-category" value={label} onChange={e=>setLabel(e.target.value)} maxLength={30} placeholder={kind==='income'?'예: 정기회비, 찬조금':'예: 스크린 이용료, 교통비'} /><Button type="button" disabled={adding} onClick={addCategory}>{adding?'저장 중…':'추가'}</Button></div><p className="text-xs text-muted-foreground">추가한 분류는 다음에도 선택할 수 있어요.</p></div>}
+    {kind==='income'&&category==='penalty'&&<p className="text-xs text-muted-foreground">게임 벌금은 위 ‘납부 확인’으로 기록하세요. 여기서 별도로 입력한 벌금은 게임의 미납 상태를 바꾸지 않으니 중복 기록에 주의해 주세요.</p>}
+    <div className="space-y-1"><Label htmlFor="emo">메모</Label><Input id="emo" name="memo" maxLength={300} /></div>
+    <Button disabled={busy||adding} className="w-full">{busy?'저장 중…':'기록하기'}</Button>
+  </form>;
 }
-

@@ -102,7 +102,7 @@ function Backup() {
       members: members.map((m) => ({ id: m.id, name: m.name, status: m.status })),
       games: games.map((g) => ({ id: g.id, date: g.played_on, venue: g.venue, memo: g.memo,
         scores: scores.filter((s) => s.game_id === g.id).map((s) => ({ name: name(s.user_id), userId: s.user_id, overPar: s.over_par, penalty: s.penalty, paymentEntryId: s.payment_entry_id })) })),
-      entries: entries.map((e) => ({ id: e.id, date: e.entry_date, kind: e.kind, category: e.category, amount: e.amount, memo: e.memo, scoreId: e.score_id, voided: !!e.voided_at, voidReason: e.void_reason })),
+      entries: entries.map((e) => ({ id: e.id, date: e.entry_date, kind: e.kind, category: e.category, customCategory: e.custom_category, amount: e.amount, memo: e.memo, scoreId: e.score_id, voided: !!e.voided_at, voidReason: e.void_reason })),
     };
     const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
     const a = document.createElement("a");

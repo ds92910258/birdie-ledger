@@ -20,11 +20,11 @@ export function useMe() {
   });
 }
 
-export type Game = { id: string; played_on: string; venue: string; memo: string | null };
+export type Game = { id: string; played_on: string; venue: string; memo: string | null; created_at?: string };
 export type Score = { id: string; game_id: string; user_id: string; over_par: number; penalty: number; payment_entry_id: string | null };
 export type Member = { id: string; name: string; status: string };
 export type Entry = {
-  id: string; kind: "income" | "expense"; category: "penalty" | "food" | "coffee" | "other"; amount: number;
+  id: string; custom_category?: string | null; kind: "income" | "expense"; category: "penalty" | "food" | "coffee" | "other"; amount: number;
   entry_date: string; memo: string | null; score_id: string | null; voided_at: string | null; void_reason: string | null; created_at: string;
 };
 
@@ -33,14 +33,15 @@ export function useClubData(enabled: boolean) {
     queryKey: ["club"],
     enabled,
     queryFn: async () => {
-      const [g, s, m, e] = await Promise.all([
-        supabase.from("games").select("id,played_on,venue,memo").order("played_on", { ascending: false }).order("created_at", { ascending: false }),
+      const [g, s, m, e, c] = await Promise.all([
+        supabase.from("games").select("id,played_on,venue,memo,created_at").order("played_on", { ascending: false }).order("created_at", { ascending: false }),
         supabase.from("game_scores").select("id,game_id,user_id,over_par,penalty,payment_entry_id").limit(5000),
         supabase.from("profiles").select("id,name,status").order("name"),
-        supabase.from("ledger_entries").select("id,kind,category,amount,entry_date,memo,score_id,voided_at,void_reason,created_at").order("entry_date", { ascending: false }).order("created_at", { ascending: false }).limit(5000),
-      ]);
-      for (const r of [g, s, m, e]) if (r.error) throw r.error;
-      return { games: (g.data ?? []) as Game[], scores: (s.data ?? []) as Score[], members: (m.data ?? []) as Member[], entries: (e.data ?? []) as Entry[] };
+        supabase.from("ledger_entries").select("id,kind,category,custom_category,amount,entry_date,memo,score_id,voided_at,void_reason,created_at").order("entry_date", { ascending: false }).order("created_at", { ascending: false }).limit(5000),
+        supabase.from("ledger_categories").select("id,kind,label").order("created_at"),
+    ]);
+      for (const r of [g, s, m, e, c]) if (r.error) throw r.error;
+      return { categories: c.data ?? [], games: (g.data ?? []) as Game[], scores: (s.data ?? []) as Score[], members: (m.data ?? []) as Member[], entries: (e.data ?? []) as Entry[] };
     },
   });
 }

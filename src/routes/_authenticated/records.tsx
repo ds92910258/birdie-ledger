@@ -1,8 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, LabelList, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell, StateBox } from "@/components/AppShell";
 import { useClubData, type Me } from "@/lib/club";
+import { recentMemberGames } from "@/lib/recent-games";
 import { formatOver, scoreStats } from "@/lib/golf";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,22 +26,17 @@ function RecordsView({ me }: { me: Me }) {
   const view = useMemo(() => {
     if (!q.data) return null;
     const { games, scores, members } = q.data;
-    const gmap = new Map(games.map((g) => [g.id, g]));
-    const ids = [a, b].filter(Boolean);
-    const rows = scores
-      .filter((s) => ids.includes(s.user_id))
-      .map((s) => ({ ...s, game: gmap.get(s.game_id)! }))
-      .filter((r) => r.game && (!from || r.game.played_on >= from) && (!to || r.game.played_on <= to))
-      .sort((x, y) => x.game.played_on.localeCompare(y.game.played_on));
-    const byKey = new Map<string, Record<string, string | number>>();
-    for (const r of rows) {
-      const key = r.game.id;
-      const p = byKey.get(key) ?? { date: r.game.played_on, label: `${r.game.played_on} ${r.game.venue}` };
-      p[r.user_id] = r.over_par;
-      byKey.set(key, p);
-    }
+    const ids=[...new Set([a,b].filter(Boolean))];
+    const selectedGames=recentMemberGames(games,scores,a,from,to);
+    const selectedIds=new Set(selectedGames.map(g=>g.id));
+    const rows=scores.filter(s=>selectedIds.has(s.game_id)&&ids.includes(s.user_id));
+    const data=selectedGames.map(g=>{
+      const point:Record<string,string|number>={date:g.played_on,label:`${g.played_on} ${g.venue}`};
+      for(const r of rows.filter(s=>s.game_id===g.id))point[r.user_id]=r.over_par;
+      return point;
+    });
     const name = (id: string) => members.find((m) => m.id === id)?.name ?? "";
-    return { data: [...byKey.values()], ids, name, members, stats: ids.map((id) => ({ id, ...scoreStats(rows.filter((r) => r.user_id === id).map((r) => r.over_par)) })) };
+    return { data, selectedGames, ids, name, members, stats: ids.map((id) => ({ id, ...scoreStats(rows.filter((r) => r.user_id === id).map((r) => r.over_par)) })) };
   }, [q.data, a, b, from, to]);
 
   if (q.isLoading) return <StateBox>불러오는 중…</StateBox>;
@@ -49,10 +45,11 @@ function RecordsView({ me }: { me: Me }) {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">기록</h1>
+      <h1 className="text-2xl font-bold">개인기록</h1>
+      <p className="text-sm text-muted-foreground">선택한 회원의 최근 10게임 스코어입니다. 오버파가 낮을수록 좋은 기록이에요.</p>
       <div className="grid grid-cols-2 gap-3 rounded-2xl border border-border bg-card p-4">
         <div className="space-y-1"><Label htmlFor="ma">회원</Label>
-          <select id="ma" className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm" value={a} onChange={(e) => setA(e.target.value)}>
+          <select id="ma" className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm" value={a} onChange={(e) => {setA(e.target.value);if(b===e.target.value)setB("");}}>
             {opts.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select></div>
         <div className="space-y-1"><Label htmlFor="mb">비교 (선택)</Label>
@@ -76,18 +73,26 @@ function RecordsView({ me }: { me: Me }) {
         ))}
       </div>
       {view.data.length === 0 ? <StateBox>선택한 기간에 기록이 없어요.</StateBox> : (
-        <div className="h-72 rounded-2xl border border-border bg-card p-2">
+        <section className="rounded-2xl border border-border bg-card p-4">
+          <h2 className="font-bold">최근 10게임 스코어</h2>
+          <p className="mt-1 text-xs text-muted-foreground">{view.name(a)} · 최근 {view.data.length}게임 · 오버파(타){b&&" · 비교 회원은 같은 게임에 참여한 기록만 표시"}</p>
+          <div className="mt-4 h-72 w-full min-w-0" role="img" aria-label={`${view.name(a)} 최근 ${view.data.length}게임 스코어 그래프`}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={view.data} margin={{ top: 10, right: 12, left: -16, bottom: 0 }}>
+            <LineChart data={view.data} margin={{ top: 28, right: 18, left: -20, bottom: 8 }}>
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
-              <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v:string)=>v.slice(5)} minTickGap={12} />
+              <YAxis tick={{ fontSize: 11 }} allowDecimals={false} domain={['auto','auto']} tickFormatter={(v:number)=>formatOver(v)} />
               <Tooltip labelFormatter={(_, p) => (p?.[0]?.payload?.label as string) ?? ""} formatter={(v: number, n: string) => [formatOver(v), view.name(n)]} />
               {view.ids.length > 1 && <Legend formatter={(v: string) => view.name(v)} />}
-              {view.ids.map((id, i) => <Line key={id} type="monotone" dataKey={id} stroke={COLORS[i]} strokeWidth={2.5} dot={{ r: 3 }} connectNulls />)}
+              {view.ids.map((id, i) => <Line key={id} type="linear" dataKey={id} stroke={COLORS[i]} strokeWidth={2.5} dot={{ r: 4 }} activeDot={{r:6}} connectNulls isAnimationActive={false}>{i===0&&<LabelList dataKey={id} position="top" offset={10} fontSize={11} formatter={(v:unknown)=>formatOver(Number(v))} />}</Line>)}
             </LineChart>
           </ResponsiveContainer>
-        </div>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">왼쪽부터 오래된 순서입니다. 점을 누르면 날짜와 스코어를 볼 수 있어요.</p>
+          <ol className="mt-4 divide-y divide-border border-t border-border text-sm">
+            {view.selectedGames.map(g=>{const score=q.data!.scores.find(s=>s.game_id===g.id&&s.user_id===a);return <li key={g.id} className="flex items-center justify-between gap-3 py-2"><span className="text-muted-foreground">{g.played_on} · {g.venue}</span><strong>{score?formatOver(score.over_par):'-'}</strong></li>;})}
+          </ol>
+        </section>
       )}
     </div>
   );

@@ -57,11 +57,11 @@ function SetupPage() {
             <Button asChild className="w-full"><Link to="/auth">로그인하러 가기</Link></Button>
           </div>
         ) : !state.data?.tokenConfigured ? (
-          <p className="mt-4 text-sm text-muted-foreground">Supabase 프로젝트의 Edge Functions → Secrets에 <b>ADMIN_SETUP_TOKEN</b>을 먼저 등록해 주세요.</p>
+          <p className="mt-4 text-sm text-muted-foreground">총무 설정 코드가 아직 준비되지 않았습니다. 프로젝트 소유자에게 문의해 주세요.</p>
         ) : (
           <form onSubmit={onSubmit} className="mt-4 space-y-4">
             <p className="text-sm text-muted-foreground">소유자 정동성 님 전용 1회성 설정입니다. 완료 후에는 이 화면이 영구히 잠깁니다.</p>
-            <div className="space-y-1.5"><Label htmlFor="token">설정 토큰</Label><Input id="token" name="token" type="password" required autoComplete="off" /></div>
+            <div className="space-y-1.5"><Label htmlFor="token">총무 설정 코드</Label><Input id="token" name="token" type="password" required autoComplete="off" /></div>
             <div className="space-y-1.5"><Label htmlFor="password">총무 비밀번호 (10자 이상)</Label><Input id="password" name="password" type="password" minLength={10} required autoComplete="new-password" /></div>
             <div className="space-y-1.5"><Label htmlFor="confirm">비밀번호 확인</Label><Input id="confirm" name="confirm" type="password" required autoComplete="new-password" /></div>
             <Button type="submit" className="w-full" disabled={busy}>{busy ? "설정 중…" : "총무 계정 만들기"}</Button>

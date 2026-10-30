@@ -69,19 +69,16 @@ function AuthPage() {
     }
     setErrors({}); setBusy(true);
     const phone = normalizePhone(r.data.phone)!;
-    const { data, error } = await supabase.auth.signUp({
-      email: `${phone}@${PHONE_EMAIL_DOMAIN}`,
-      password: r.data.password,
-      options: { data: { name: r.data.name, phone } },
-    });
-    setBusy(false);
-    if (error) return void toast.error(koAuthError(error.message));
-    if (data.session) {
-      toast.success("가입 신청이 완료됐어요. 총무 승인을 기다려 주세요.");
-      navigate({ to: "/home" });
-    } else {
-      toast.success("가입 신청이 완료됐어요. 로그인해 주세요.");
-    }
+    try {
+      const {data,error}=await supabase.functions.invoke('member-signup',{body:{phone,name:r.data.name,password:r.data.password}});
+      if(error||data?.error) {toast.error(data?.error||'가입하지 못했습니다. 이미 가입된 번호인지 확인해 주세요.'); return;}
+      const login=await supabase.auth.signInWithPassword({email:`${phone}@${PHONE_EMAIL_DOMAIN}`,password:r.data.password});
+      if(login.error){toast.success('가입 신청이 완료됐어요. 로그인해 주세요.');return;}
+      toast.success('가입 신청이 완료됐어요. 총무 승인을 기다려 주세요.');
+      navigate({to:'/home'});
+    } catch {toast.error('서버에 연결하지 못했습니다. 다시 시도해 주세요.');}
+    finally {setBusy(false);}
+
   }
 
   const err = (k: string) => errors[k] && <p id={`${k}-err`} className="text-xs text-destructive">{errors[k]}</p>;

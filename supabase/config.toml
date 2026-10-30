@@ -1,2 +1,5 @@
 [functions.admin-setup]
 verify_jwt = false
+
+[functions.member-signup]
+verify_jwt = false

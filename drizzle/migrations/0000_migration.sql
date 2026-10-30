@@ -1,3 +1,5 @@
+create schema if not exists private;
+grant usage on schema private to authenticated, service_role;
 
 -- ===== Enums =====
 create type public.app_role as enum ('admin');
@@ -38,26 +40,26 @@ grant select on public.user_roles to authenticated;
 grant all on public.user_roles to service_role;
 alter table public.user_roles enable row level security;
 
-create or replace function public.has_role(_user_id uuid, _role public.app_role)
+create or replace function private.has_role(_user_id uuid, _role public.app_role)
 returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.user_roles where user_id = _user_id and role = _role)
 $$;
 
-create or replace function public.is_member(_user_id uuid)
+create or replace function private.is_member(_user_id uuid)
 returns boolean language sql stable security definer set search_path = public as $$
-  select public.has_role(_user_id,'admin')
+  select private.has_role(_user_id,'admin')
       or exists (select 1 from public.profiles where id = _user_id and status = 'approved')
 $$;
 
 create policy "own role read" on public.user_roles for select to authenticated using (user_id = auth.uid());
 
 create policy "profile self read" on public.profiles for select to authenticated using (id = auth.uid());
-create policy "members read profiles" on public.profiles for select to authenticated using (public.is_member(auth.uid()));
+create policy "members read profiles" on public.profiles for select to authenticated using (private.is_member(auth.uid()));
 create policy "contact self or admin" on public.member_contacts for select to authenticated
-  using (user_id = auth.uid() or public.has_role(auth.uid(),'admin'));
+  using (user_id = auth.uid() or private.has_role(auth.uid(),'admin'));
 
 -- ===== Signup trigger =====
-create or replace function public.handle_new_user()
+create or replace function private.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 declare
   v_phone text;
@@ -74,7 +76,7 @@ begin
   if v_phone !~ '^010[0-9]{8}$' then
     raise exception '올바른 휴대폰 번호가 아닙니다';
   end if;
-  if lower(new.email) <> v_phone || '@phone.birdiejangbu.app' then
+  if lower(new.email) is distinct from v_phone || '@phone.birdiejangbu.app' then
     raise exception '허용되지 않은 가입 방식입니다';
   end if;
   if char_length(v_name) < 1 or char_length(v_name) > 30 then
@@ -86,7 +88,7 @@ begin
 end $$;
 
 create trigger on_auth_user_created after insert on auth.users
-for each row execute function public.handle_new_user();
+for each row execute function private.handle_new_user();
 
 -- ===== Audit log =====
 create table public.audit_log (
@@ -101,13 +103,13 @@ create table public.audit_log (
 grant select on public.audit_log to authenticated;
 grant all on public.audit_log to service_role;
 alter table public.audit_log enable row level security;
-create policy "admin read audit" on public.audit_log for select to authenticated using (public.has_role(auth.uid(),'admin'));
+create policy "admin read audit" on public.audit_log for select to authenticated using (private.has_role(auth.uid(),'admin'));
 
-create or replace function public.write_audit(_action text, _entity text, _id text, _details jsonb)
+create or replace function private.write_audit(_action text, _entity text, _id text, _details jsonb)
 returns void language sql security definer set search_path = public as $$
   insert into public.audit_log(actor, action, entity, entity_id, details) values (auth.uid(), _action, _entity, _id, _details);
 $$;
-revoke execute on function public.write_audit(text,text,text,jsonb) from public, anon, authenticated;
+revoke execute on function private.write_audit(text,text,text,jsonb) from public, anon, authenticated;
 
 -- ===== Games =====
 create table public.games (
@@ -121,10 +123,10 @@ create table public.games (
 grant select, insert, update, delete on public.games to authenticated;
 grant all on public.games to service_role;
 alter table public.games enable row level security;
-create policy "members read games" on public.games for select to authenticated using (public.is_member(auth.uid()));
-create policy "admin insert games" on public.games for insert to authenticated with check (public.has_role(auth.uid(),'admin'));
-create policy "admin update games" on public.games for update to authenticated using (public.has_role(auth.uid(),'admin')) with check (public.has_role(auth.uid(),'admin'));
-create policy "admin delete games" on public.games for delete to authenticated using (public.has_role(auth.uid(),'admin'));
+create policy "members read games" on public.games for select to authenticated using (private.is_member(auth.uid()));
+create policy "admin insert games" on public.games for insert to authenticated with check (private.has_role(auth.uid(),'admin'));
+create policy "admin update games" on public.games for update to authenticated using (private.has_role(auth.uid(),'admin')) with check (private.has_role(auth.uid(),'admin'));
+create policy "admin delete games" on public.games for delete to authenticated using (private.has_role(auth.uid(),'admin'));
 
 -- ===== Ledger =====
 create table public.ledger_entries (
@@ -144,7 +146,7 @@ create table public.ledger_entries (
 grant select on public.ledger_entries to authenticated;
 grant all on public.ledger_entries to service_role;
 alter table public.ledger_entries enable row level security;
-create policy "members read ledger" on public.ledger_entries for select to authenticated using (public.is_member(auth.uid()));
+create policy "members read ledger" on public.ledger_entries for select to authenticated using (private.is_member(auth.uid()));
 
 -- ===== Scores =====
 create table public.game_scores (
@@ -163,29 +165,29 @@ alter table public.ledger_entries add constraint ledger_score_fk foreign key (sc
 grant select, insert, update, delete on public.game_scores to authenticated;
 grant all on public.game_scores to service_role;
 alter table public.game_scores enable row level security;
-create policy "members read scores" on public.game_scores for select to authenticated using (public.is_member(auth.uid()));
+create policy "members read scores" on public.game_scores for select to authenticated using (private.is_member(auth.uid()));
 create policy "insert own or admin" on public.game_scores for insert to authenticated
-  with check (public.has_role(auth.uid(),'admin') or (user_id = auth.uid() and public.is_member(auth.uid())));
+  with check (private.has_role(auth.uid(),'admin') or (user_id = auth.uid() and private.is_member(auth.uid())));
 create policy "update own or admin" on public.game_scores for update to authenticated
-  using (public.has_role(auth.uid(),'admin') or (user_id = auth.uid() and public.is_member(auth.uid())))
-  with check (public.has_role(auth.uid(),'admin') or (user_id = auth.uid() and public.is_member(auth.uid())));
+  using (private.has_role(auth.uid(),'admin') or (user_id = auth.uid() and private.is_member(auth.uid())))
+  with check (private.has_role(auth.uid(),'admin') or (user_id = auth.uid() and private.is_member(auth.uid())));
 create policy "admin delete scores" on public.game_scores for delete to authenticated
-  using (public.has_role(auth.uid(),'admin') and payment_entry_id is null);
+  using (private.has_role(auth.uid(),'admin') and payment_entry_id is null);
 
-create or replace function public.guard_scores()
+create or replace function private.guard_scores()
 returns trigger language plpgsql security definer set search_path = public as $$
-declare v_admin boolean := public.has_role(auth.uid(),'admin');
+declare v_admin boolean := private.has_role(auth.uid(),'admin');
 begin
   if tg_op = 'INSERT' then
     if new.payment_entry_id is not null and auth.uid() is not null then
       raise exception '납부 정보는 직접 입력할 수 없습니다';
     end if;
     new.updated_by := auth.uid();
-    perform public.write_audit('score_create','game_scores',new.id::text, jsonb_build_object('game',new.game_id,'user',new.user_id,'over_par',new.over_par));
+    perform private.write_audit('score_create','game_scores',new.id::text, jsonb_build_object('game',new.game_id,'user',new.user_id,'over_par',new.over_par));
     return new;
   end if;
   if tg_op = 'DELETE' then
-    perform public.write_audit('score_delete','game_scores',old.id::text, to_jsonb(old));
+    perform private.write_audit('score_delete','game_scores',old.id::text, to_jsonb(old));
     return old;
   end if;
   -- UPDATE
@@ -203,43 +205,43 @@ begin
   new.updated_by := auth.uid();
   new.updated_at := now();
   if new.over_par <> old.over_par then
-    perform public.write_audit('score_update','game_scores',new.id::text, jsonb_build_object('from',old.over_par,'to',new.over_par,'paid',old.payment_entry_id is not null));
+    perform private.write_audit('score_update','game_scores',new.id::text, jsonb_build_object('from',old.over_par,'to',new.over_par,'paid',old.payment_entry_id is not null));
   end if;
   return new;
 end $$;
-create trigger guard_scores_ins before insert on public.game_scores for each row execute function public.guard_scores();
-create trigger guard_scores_upd before update on public.game_scores for each row execute function public.guard_scores();
-create trigger guard_scores_del before delete on public.game_scores for each row execute function public.guard_scores();
+create trigger guard_scores_ins before insert on public.game_scores for each row execute function private.guard_scores();
+create trigger guard_scores_upd before update on public.game_scores for each row execute function private.guard_scores();
+create trigger guard_scores_del before delete on public.game_scores for each row execute function private.guard_scores();
 
-create or replace function public.audit_games()
+create or replace function private.audit_games()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  perform public.write_audit(lower(tg_op)||'_game','games', coalesce(new.id,old.id)::text,
+  perform private.write_audit(lower(tg_op)||'_game','games', coalesce(new.id,old.id)::text,
     jsonb_build_object('old', case when tg_op<>'INSERT' then to_jsonb(old) end, 'new', case when tg_op<>'DELETE' then to_jsonb(new) end));
   return coalesce(new, old);
 end $$;
-create trigger audit_games_t after insert or update or delete on public.games for each row execute function public.audit_games();
+create trigger audit_games_t after insert or update or delete on public.games for each row execute function private.audit_games();
 
 -- ===== Admin RPCs =====
 create or replace function public.admin_set_member_status(_user_id uuid, _status public.member_status)
 returns void language plpgsql security definer set search_path = public as $$
 begin
-  if not public.has_role(auth.uid(),'admin') then raise exception '권한이 없습니다'; end if;
-  if public.has_role(_user_id,'admin') then raise exception '총무 계정 상태는 변경할 수 없습니다'; end if;
+  if not private.has_role(auth.uid(),'admin') then raise exception '권한이 없습니다'; end if;
+  if private.has_role(_user_id,'admin') then raise exception '총무 계정 상태는 변경할 수 없습니다'; end if;
   update public.profiles set status = _status, decided_at = now(), decided_by = auth.uid() where id = _user_id;
   if not found then raise exception '회원을 찾을 수 없습니다'; end if;
-  perform public.write_audit('member_status','profiles',_user_id::text, jsonb_build_object('status',_status));
+  perform private.write_audit('member_status','profiles',_user_id::text, jsonb_build_object('status',_status));
 end $$;
 
 create or replace function public.admin_add_entry(_kind public.ledger_kind, _category public.ledger_category, _amount int, _date date, _memo text)
 returns uuid language plpgsql security definer set search_path = public as $$
 declare v_id uuid;
 begin
-  if not public.has_role(auth.uid(),'admin') then raise exception '권한이 없습니다'; end if;
+  if not private.has_role(auth.uid(),'admin') then raise exception '권한이 없습니다'; end if;
   if _category = 'penalty' then raise exception '벌금 수입은 점수 납부 처리로만 기록됩니다'; end if;
   insert into public.ledger_entries(kind, category, amount, entry_date, memo, created_by)
     values (_kind, _category, _amount, _date, nullif(btrim(_memo),''), auth.uid()) returning id into v_id;
-  perform public.write_audit('entry_create','ledger_entries',v_id::text, jsonb_build_object('kind',_kind,'category',_category,'amount',_amount,'date',_date));
+  perform private.write_audit('entry_create','ledger_entries',v_id::text, jsonb_build_object('kind',_kind,'category',_category,'amount',_amount,'date',_date));
   return v_id;
 end $$;
 
@@ -247,7 +249,7 @@ create or replace function public.admin_void_entry(_entry_id uuid, _reason text)
 returns void language plpgsql security definer set search_path = public as $$
 declare e public.ledger_entries;
 begin
-  if not public.has_role(auth.uid(),'admin') then raise exception '권한이 없습니다'; end if;
+  if not private.has_role(auth.uid(),'admin') then raise exception '권한이 없습니다'; end if;
   if char_length(btrim(coalesce(_reason,''))) < 1 then raise exception '취소 사유를 입력해 주세요'; end if;
   select * into e from public.ledger_entries where id = _entry_id for update;
   if not found then raise exception '내역을 찾을 수 없습니다'; end if;
@@ -258,7 +260,7 @@ begin
     update public.game_scores set payment_entry_id = null where id = e.score_id and payment_entry_id = _entry_id;
     perform set_config('app.payment_rpc','off', true);
   end if;
-  perform public.write_audit('entry_void','ledger_entries',_entry_id::text, jsonb_build_object('reason',_reason,'amount',e.amount));
+  perform private.write_audit('entry_void','ledger_entries',_entry_id::text, jsonb_build_object('reason',_reason,'amount',e.amount));
 end $$;
 
 -- Mark a score paid: records actual payment of the current charge
@@ -266,7 +268,7 @@ create or replace function public.admin_mark_paid(_score_id uuid, _received date
 returns uuid language plpgsql security definer set search_path = public as $$
 declare s public.game_scores; v_id uuid; v_name text; v_game public.games;
 begin
-  if not public.has_role(auth.uid(),'admin') then raise exception '권한이 없습니다'; end if;
+  if not private.has_role(auth.uid(),'admin') then raise exception '권한이 없습니다'; end if;
   select * into s from public.game_scores where id = _score_id for update;
   if not found then raise exception '점수를 찾을 수 없습니다'; end if;
   if s.payment_entry_id is not null then raise exception '이미 납부 처리된 점수입니다. 정정하려면 먼저 납부를 취소하세요'; end if;
@@ -279,7 +281,7 @@ begin
   perform set_config('app.payment_rpc','on', true);
   update public.game_scores set payment_entry_id = v_id where id = _score_id;
   perform set_config('app.payment_rpc','off', true);
-  perform public.write_audit('score_paid','game_scores',_score_id::text, jsonb_build_object('amount',_amount,'received',_received,'entry',v_id));
+  perform private.write_audit('score_paid','game_scores',_score_id::text, jsonb_build_object('amount',_amount,'received',_received,'entry',v_id));
   return v_id;
 end $$;
 
@@ -288,8 +290,8 @@ create or replace function public.admin_list_members()
 returns table(id uuid, name text, phone text, status public.member_status, created_at timestamptz, is_admin boolean)
 language plpgsql stable security definer set search_path = public as $$
 begin
-  if not public.has_role(auth.uid(),'admin') then raise exception '권한이 없습니다'; end if;
-  return query select p.id, p.name, c.phone, p.status, p.created_at, public.has_role(p.id,'admin')
+  if not private.has_role(auth.uid(),'admin') then raise exception '권한이 없습니다'; end if;
+  return query select p.id, p.name, c.phone, p.status, p.created_at, private.has_role(p.id,'admin')
     from public.profiles p left join public.member_contacts c on c.user_id = p.id order by p.created_at;
 end $$;
 
@@ -303,5 +305,9 @@ grant execute on function public.admin_add_entry(public.ledger_kind, public.ledg
 grant execute on function public.admin_void_entry(uuid, text) to authenticated;
 grant execute on function public.admin_mark_paid(uuid, date, int) to authenticated;
 grant execute on function public.admin_list_members() to authenticated;
-revoke execute on function public.handle_new_user() from public, anon, authenticated;
+revoke execute on function private.handle_new_user() from public, anon, authenticated;
 
+
+revoke execute on function private.has_role(uuid,public.app_role) from public,anon;
+revoke execute on function private.is_member(uuid) from public,anon;
+grant execute on function private.has_role(uuid,public.app_role),private.is_member(uuid) to authenticated,service_role;
